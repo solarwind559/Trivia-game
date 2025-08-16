@@ -8,51 +8,137 @@ use Illuminate\Support\Facades\Http;
 
 class TriviaController extends Controller
 {
-    public function index()
+    public function welcome()
     {
         return view('welcome');
     }
 
-    public function getQuestion(Request $request)
+    public function startGame()
     {
-        $used = $request->session()->get('used_numbers', []);
-        $number = $this->getUniqueRandomNumber($used);
-
-        $response = Http::get("http://numbersapi.com/{$number}/trivia?json");
-
-        if (!$response->successful() || !$response['found']) {
-            return view('trivia')->withErrors(['error' => 'Failed to fetch trivia.']);
-        }
-
-        $fact = $response['text'];
-        $correctAnswer = $response['number'];
-
-        $options = collect([$correctAnswer]);
-        while ($options->count() < 4) {
-            $fake = rand(1, 300);
-            if (!$options->contains($fake)) {
-                $options->push($fake);
-            }
-        }
-
-        $shuffled = $options->shuffle();
-
-        $used[] = $number;
-        $request->session()->put('used_numbers', $used);
-
-        return view('trivia', [
-            'question' => $fact,
-            'options' => $shuffled->values(),
-            'answer' => $correctAnswer
-        ]);
+        $this->preloadTrivia();
+        return $this->index(request());
     }
 
-    private function getUniqueRandomNumber(array $used)
+    public function index(Request $request)
     {
-        do {
-            $number = rand(1, 300);
-        } while (in_array($number, $used));
+        $request->session()->flush();
+        $triviaSet = $this->preloadTrivia();
+        $request->session()->put([
+            'trivia_queue' => $triviaSet,
+            'current_index' => 0,
+            'score' => 0,
+            'fails' => 0,
+            'answer_history' => [],
+        ]);
 
-        return $number;
+        return redirect()->route('trivia');
+    }
+
+    public function getQuestion(Request $request)
+    {
+        $queue = $request->session()->get('trivia_queue', []);
+        $index = $request->session()->get('current_index', 0);
+        $score = $request->session()->get('score', 0);
+        $fails = $request->session()->get('fails', 0);
+
+        if (empty($queue)) {
+            return redirect()->route('start');
+        }
+
+        if ($fails >= 3 || $index >= 20 || $index >= count($queue)) {
+            return redirect()->route('result');
+        }
+
+        $questionData = $queue[$index];
+        $question = $questionData['question'];
+        $options = $questionData['options'];
+        $answer = $questionData['answer'];
+
+        if ($request->isMethod('post') && $request->has('selected')) {
+            $selected = $request->input('selected');
+
+            if ($selected == $answer) {
+                $request->session()->put('score', $score + 1);
+            } else {
+                $request->session()->put('fails', $fails + 1);
+            }
+
+            $history = $request->session()->get('answer_history', []);
+            $history[] = compact('question', 'selected') + [
+                'correct' => $answer,
+                'is_correct' => $selected == $answer,
+            ];
+
+            $request->session()->put([
+                'answer_history' => $history,
+                'current_index' => $index + 1,
+            ]);
+
+            return redirect()->route('trivia');
+        }
+
+        return view('trivia', compact('question', 'options'));
+    }
+
+    public function showResult(Request $request)
+    {
+        $score = $request->session()->get('score', 0);
+        $fails = $request->session()->get('fails', 0);
+        $history = $request->session()->get('answer_history', []);
+
+        $request->session()->forget([
+            'score', 'fails', 'current_index', 'trivia_queue', 'answer_history'
+        ]);
+
+        return view('result', compact('score', 'fails', 'history'));
+    }
+
+    private function preloadTrivia(): array
+    {
+        $desiredCount = 20;
+        $triviaSet = [];
+
+        $numbers = collect(range(1, 300))->shuffle()->take(50);
+
+        $numberList = $numbers->implode(',');
+
+        try {
+            $response = Http::timeout(3)->get("http://numbersapi.com/{$numberList}/trivia?json");
+
+            if ($response->ok()) {
+                $data = $response->json();
+
+                foreach ($numbers as $number) {
+                    if (isset($data[$number]) && count($triviaSet) < $desiredCount) {
+                        $fact = $data[$number];
+
+                        $options = $this->generateOptions($number);
+
+                        $triviaSet[] = [
+                            'question' => $fact,
+                            'options' => $options,
+                            'answer' => $number,
+                        ];
+                    }
+                }
+            }
+        } catch (\Exception $e) {}
+
+        return $triviaSet;
+    }
+
+    private function generateOptions(int $number): array
+    {
+        return collect([$number])
+            ->merge([
+                $number + rand(1, 5),
+                $number - rand(1, 5),
+                $number + rand(6, 10),
+            ])
+            ->unique()
+            ->filter(fn($n) => $n > 0)
+            ->shuffle()
+            ->take(4)
+            ->all();
     }
 }

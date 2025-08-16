@@ -9,10 +9,11 @@
         <div class="alert alert-danger">{{ $errors->first() }}</div>
     @else
         <div class="my-4">
-            <h2 class="mx-auto">{{ $question }}</h4>
+            <h2 class="mx-auto">{{ $question }}</h2>
         </div>
 
-        <form method="GET" action="/trivia">
+        <form method="POST" action="{{ route('trivia') }}">
+            @csrf
             <div class="row">
                 @foreach ($options as $option)
                     <div class="col-6 mb-3">
@@ -24,32 +25,6 @@
                 @endforeach
             </div>
         </form>
-
-        @if (request('selected'))
-            <div class="mt-4">
-                @if (request('selected') == $answer)
-                    <div class="alert alert-success">Correct!</div>
-                @else
-                    <div class="alert alert-danger">
-                        Incorrect! The correct answer was <strong>{{ $answer }}</strong>.
-                    </div>
-                @endif
-            </div>
-        @endif
     @endif
-    <script>
-        document.querySelector('a.btn-secondary')?.addEventListener('click', function (e) {
-            e.preventDefault();
-            fetch('/trivia')
-                .then(res => res.text())
-                .then(html => {
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(html, 'text/html');
-                    const newContent = doc.querySelector('#trivia-container');
-                    document.querySelector('#trivia-container').replaceWith(newContent);
-                });
-
-        });
-    </script>
 
 @endsection
