@@ -3,13 +3,25 @@
 @section('title', 'Trivia page')
 
 @section('content')
-    <h1 class="my-5">Questions</h1>
+    <h1 class="mt-5 mb-3">Questions</h1>
+
+    @if (session('feedback'))
+        @php $fb = session('feedback'); @endphp
+        <div class="alert {{ $fb['is_correct'] ? 'alert-success' : 'alert-danger' }}">
+            <strong>{{ $fb['is_correct'] ? 'Correct!' : 'Incorrect!' }}</strong><br>
+            <strong>Question:</strong> What is {{ $fb['question'] }}?<br>
+            <strong>Your answer:</strong> {{ $fb['selected'] }}<br>
+            @if (!$fb['is_correct'])
+                <strong>Correct answer:</strong> {{ $fb['correct'] }}
+            @endif
+        </div>
+    @endif
 
     @if ($errors->any())
         <div class="alert alert-danger">{{ $errors->first() }}</div>
     @else
         <div class="my-4">
-            <h2 class="mx-auto">{{ $question }}</h2>
+            <h2>What is {{ $question }}?</h2>
         </div>
 
         <form method="POST" action="{{ route('trivia') }}">

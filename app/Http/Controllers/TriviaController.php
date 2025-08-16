@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Support\Arr;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Http;
@@ -74,6 +75,13 @@ class TriviaController extends Controller
                 'current_index' => $index + 1,
             ]);
 
+            $request->session()->flash('feedback', [
+                'is_correct' => $selected == $answer,
+                'question' => $question,
+                'selected' => $selected,
+                'correct' => $answer,
+            ]);
+
             return redirect()->route('trivia');
         }
 
@@ -103,7 +111,7 @@ class TriviaController extends Controller
         $numberList = $numbers->implode(',');
 
         try {
-            $response = Http::timeout(3)->get("http://numbersapi.com/{$numberList}/trivia?json");
+            $response = Http::timeout(3)->get("http://numbersapi.com/{$numberList}/trivia?fragment&notfound=floor");
 
             if ($response->ok()) {
                 $data = $response->json();
@@ -129,16 +137,14 @@ class TriviaController extends Controller
 
     private function generateOptions(int $number): array
     {
-        return collect([$number])
-            ->merge([
-                $number + rand(1, 5),
-                $number - rand(1, 5),
-                $number + rand(6, 10),
-            ])
-            ->unique()
-            ->filter(fn($n) => $n > 0)
-            ->shuffle()
-            ->take(4)
-            ->all();
+        $options = collect([
+            $number,
+            $number + rand(1, 5),
+            $number - rand(1, 5),
+            $number + rand(6, 10),
+            $number - rand(6, 10),
+        ])->filter(fn($n) => $n > 0)->unique()->all();
+
+        return Arr::random($options, min(4, count($options)));
     }
 }
