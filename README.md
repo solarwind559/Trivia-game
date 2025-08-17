@@ -18,3 +18,5 @@ php artisan migrate
 npm run dev
 php artisan serve
 ```
+
+The Laravel server should be up and running
