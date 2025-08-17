@@ -19,6 +19,10 @@
 
     @if ($errors->any())
         <div class="alert alert-danger">{{ $errors->first() }}</div>
+    @elseif (!$question || empty($options))
+        <div class="alert alert-danger">
+            Oops! Something went wrong. Please try again later.
+        </div>
     @else
         <div class="my-4">
             <h2>What is {{ $question }}?</h2>

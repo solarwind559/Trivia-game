@@ -6,6 +6,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Http;
+use Log;
 
 class TriviaController extends Controller
 {
@@ -16,7 +17,6 @@ class TriviaController extends Controller
 
     public function startGame()
     {
-        $this->preloadTrivia();
         return $this->index(request());
     }
 
@@ -130,7 +130,10 @@ class TriviaController extends Controller
                     }
                 }
             }
-        } catch (\Exception $e) {}
+        } catch (\Exception $e) {
+                Log::error("API failed: " . $e->getMessage());
+                return [];
+        }
 
         return $triviaSet;
     }
