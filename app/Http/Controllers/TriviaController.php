@@ -3,9 +3,10 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Http;
 use Log;
 
 class TriviaController extends Controller
@@ -22,9 +23,12 @@ class TriviaController extends Controller
 
     public function index(Request $request)
     {
-        $request->session()->flush();
+        $request->session()->forget([
+            'trivia_queue', 'current_index', 'score', 'fails', 'answer_history'
+        ]);
         $triviaSet = $this->preloadTrivia();
-        $request->session()->put([
+        $gameId = Str::random(20);
+        $request->session()->put("games.$gameId", [
             'trivia_queue' => $triviaSet,
             'current_index' => 0,
             'score' => 0,
@@ -32,22 +36,30 @@ class TriviaController extends Controller
             'answer_history' => [],
         ]);
 
-        return redirect()->route('trivia');
+        return redirect()->route('trivia', ['game' => $gameId]);
     }
 
-    public function getQuestion(Request $request)
+    public function getQuestion(Request $request, $game)
     {
-        $queue = $request->session()->get('trivia_queue', []);
-        $index = $request->session()->get('current_index', 0);
-        $score = $request->session()->get('score', 0);
-        $fails = $request->session()->get('fails', 0);
+        $gameKey = "games.$game";
+        $gameData = $request->session()->get($gameKey);
+
+        if (!$gameData) {
+            return redirect()->route('start');
+        }
+
+        $queue = $gameData['trivia_queue'];
+        $index = $gameData['current_index'];
+        $score = $gameData['score'];
+        $fails = $gameData['fails'];
+        $history = $gameData['answer_history'];
 
         if (empty($queue)) {
             return redirect()->route('start');
         }
 
         if ($fails >= 3 || $index >= 20 || $index >= count($queue)) {
-            return redirect()->route('result');
+            return redirect()->route('result', ['game' => $game]);
         }
 
         $questionData = $queue[$index];
@@ -57,46 +69,51 @@ class TriviaController extends Controller
 
         if ($request->isMethod('post') && $request->has('selected')) {
             $selected = $request->input('selected');
+            $isCorrect = $selected == $answer;
 
-            if ($selected == $answer) {
-                $request->session()->put('score', $score + 1);
-            } else {
-                $request->session()->put('fails', $fails + 1);
-            }
+            $score += $isCorrect ? 1 : 0;
+            $fails += $isCorrect ? 0 : 1;
 
-            $history = $request->session()->get('answer_history', []);
             $history[] = compact('question', 'selected') + [
                 'correct' => $answer,
-                'is_correct' => $selected == $answer,
+                'is_correct' => $isCorrect,
             ];
 
-            $request->session()->put([
-                'answer_history' => $history,
+            $request->session()->put($gameKey, [
+                'trivia_queue' => $queue,
                 'current_index' => $index + 1,
+                'score' => $score,
+                'fails' => $fails,
+                'answer_history' => $history,
             ]);
 
             $request->session()->flash('feedback', [
-                'is_correct' => $selected == $answer,
+                'is_correct' => $isCorrect,
                 'question' => $question,
                 'selected' => $selected,
                 'correct' => $answer,
             ]);
 
-            return redirect()->route('trivia');
+            return redirect()->route('trivia', ['game' => $game]);
         }
 
-        return view('trivia', compact('question', 'options'));
+        return view('trivia', compact('question', 'options', 'game'));
     }
 
-    public function showResult(Request $request)
+    public function showResult(Request $request, $game)
     {
-        $score = $request->session()->get('score', 0);
-        $fails = $request->session()->get('fails', 0);
-        $history = $request->session()->get('answer_history', []);
+        $gameKey = "games.$game";
+        $gameData = $request->session()->get($gameKey);
 
-        $request->session()->forget([
-            'score', 'fails', 'current_index', 'trivia_queue', 'answer_history'
-        ]);
+        if (!$gameData) {
+            return redirect()->route('start');
+        }
+
+        $score = $gameData['score'];
+        $fails = $gameData['fails'];
+        $history = $gameData['answer_history'];
+
+        $request->session()->forget($gameKey);
 
         return view('result', compact('score', 'fails', 'history'));
     }

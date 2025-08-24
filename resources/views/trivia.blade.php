@@ -28,7 +28,7 @@
             <h2>What is {{ $question }}?</h2>
         </div>
 
-        <form method="POST" action="{{ route('trivia') }}">
+        <form method="POST" action="{{ route('trivia', ['game' => $game]) }}">
             @csrf
             <div class="row">
                 @foreach ($options as $option)
